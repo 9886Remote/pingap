@@ -22,6 +22,7 @@ use crate::server_locations::try_init_server_locations;
 use crate::upstreams::new_upstream_provider;
 use crate::upstreams::try_init_upstreams;
 use bytes::BytesMut;
+use bytes::BytesMut;
 use clap::Parser;
 use crossbeam_channel::Receiver;
 use pingap_acme::new_lets_encrypt_service;
@@ -41,6 +42,10 @@ use pingap_logger::{
     new_async_logger, new_log_compress_service, AsyncLoggerTask,
     LogCompressParams,
 };
+use pingap_logger::{
+    new_async_logger, new_nats_logger, AsyncLoggerTask, NatsLoggerTask,
+};
+
 #[cfg(feature = "full")]
 use pingap_otel::TracerService;
 use pingap_performance::new_performance_metrics_log_service;
@@ -291,6 +296,41 @@ fn new_access_logger(
             },
         };
     });
+    r
+}
+
+fn new_nats_access_logger(
+    path: &str,
+) -> Receiver<
+    Result<
+        (tokio::sync::mpsc::Sender<BytesMut>, NatsLoggerTask),
+        pingap_core::Error,
+    >,
+> {
+    let file = path.to_string();
+    let (s, r) = crossbeam_channel::bounded(0);
+
+    std::thread::spawn(move || {
+        match tokio::runtime::Runtime::new() {
+            Ok(rt) => {
+                let send = async move {
+                    let result = new_nats_logger(&file).await;
+                    if let Err(e) = s.send(result) {
+                        println!("NATS logger sender fail: {e}");
+                    }
+                };
+                rt.block_on(send);
+            },
+            Err(e) => {
+                if let Err(e) = s.send(Err(pingap_core::Error::Invalid {
+                    message: format!("Failed to create tokio runtime: {}", e),
+                })) {
+                    println!("NATS logger sender fail: {e}");
+                }
+            },
+        };
+    });
+
     r
 }
 
@@ -728,11 +768,73 @@ fn run() -> Result<(), Box<dyn Error>> {
             parse_access_log_directive(server_conf.access_log.as_ref());
 
         let access_logger = if let Some(log_path) = log_path {
-            let r = new_access_logger(&log_path);
-            let (tx, task) = r.recv()??;
-            application_log_paths.push(task.get_dir());
-            my_server.add_service(background_service("access_logger", task));
-            Some(tx)
+            // 判断是否为 NATS URL
+            if log_path.starts_with("nats://") {
+                info!(
+                    target: LOG_TARGET,
+                    path = log_path,
+                    "initializing NATS access logger"
+                );
+                let r = new_nats_access_logger(&log_path);
+                match r.recv() {
+                    Ok(Ok((tx, task))) => {
+                        info!(
+                            target: LOG_TARGET,
+                            subject = task.get_subject(),
+                            "NATS access logger initialized successfully"
+                        );
+                        my_server.add_service(background_service(
+                            "nats_access_logger",
+                            task,
+                        ));
+                        Some(tx)
+                    },
+                    Ok(Err(e)) => {
+                        error!(
+                            target: LOG_TARGET,
+                            error = %e,
+                            "failed to create NATS access logger"
+                        );
+
+                        // 检查是否配置了降级文件
+                        if log_path.contains("fallback=") {
+                            warn!(
+                                target: LOG_TARGET,
+                                "NATS unavailable, logs will be written to fallback file"
+                            );
+                        } else {
+                            warn!(
+                                target: LOG_TARGET,
+                                "NATS unavailable and no fallback configured, access logs disabled"
+                            );
+                        }
+                        None
+                    },
+                    Err(e) => {
+                        error!(
+                            target: LOG_TARGET,
+                            error = %e,
+                            "failed to receive NATS access logger"
+                        );
+                        None
+                    },
+                }
+            } else {
+                // 原有文件日志逻辑
+                info!(
+                    target: LOG_TARGET,
+                    path = log_path,
+                    "initializing file access logger"
+                );
+
+                let r = new_access_logger(&log_path);
+                let (tx, task) = r.recv()??;
+
+                application_log_paths.push(task.get_dir());
+                my_server
+                    .add_service(background_service("access_logger", task));
+                Some(tx)
+            }
         } else {
             None
         };
