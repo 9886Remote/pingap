@@ -35,7 +35,6 @@ hmac-sha512 = { workspace = true, default-features = false }
 humantime = { workspace = true }
 mime_guess = { workspace = true }
 nanoid = { workspace = true }
-once_cell = { workspace = true }
 pingap-cache = { version = "0.12.0", path = "../pingap-cache" }
 pingap-config = { version = "0.12.0", path = "../pingap-config" }
 pingap-core = { version = "0.12.0", path = "../pingap-core" }
@@ -60,3 +59,7 @@ uuid = { workspace = true }
 [dev-dependencies]
 pretty_assertions = "1.4.1"
 tokio-test = "0.4.4"
+
+[lints.clippy]
+# Set the unwrap_used lint level to deny
+unwrap_used = "deny"

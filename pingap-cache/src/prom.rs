@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use super::Error;
-use once_cell::sync::Lazy;
 use prometheus::{Histogram, HistogramOpts, Opts};
+use std::sync::LazyLock;
 type Result<T, E = Error> = std::result::Result<T, E>;
 
 fn new_histogram(
@@ -36,7 +36,7 @@ fn new_histogram(
     Ok(histogram)
 }
 
-pub static CACHE_READING_TIME: Lazy<Box<Histogram>> = Lazy::new(|| {
+pub static CACHE_READING_TIME: LazyLock<Box<Histogram>> = LazyLock::new(|| {
     Box::new(
         new_histogram(
             "",
@@ -44,10 +44,10 @@ pub static CACHE_READING_TIME: Lazy<Box<Histogram>> = Lazy::new(|| {
             "pingap cache storage read time(second)",
             &[0.001, 0.005, 0.01, 0.05, 0.1, 0.25, 0.5, 1.0],
         )
-        .unwrap(),
+        .expect("Failed to register CACHE_READING_TIME histogram metric"),
     )
 });
-pub static CACHE_WRITING_TIME: Lazy<Box<Histogram>> = Lazy::new(|| {
+pub static CACHE_WRITING_TIME: LazyLock<Box<Histogram>> = LazyLock::new(|| {
     Box::new(
         new_histogram(
             "",
@@ -55,6 +55,6 @@ pub static CACHE_WRITING_TIME: Lazy<Box<Histogram>> = Lazy::new(|| {
             "pingap cache storage write time(second)",
             &[0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0],
         )
-        .unwrap(),
+        .expect("Failed to register CACHE_WRITING_TIME histogram metric"),
     )
 });

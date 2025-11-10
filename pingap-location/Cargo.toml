@@ -15,7 +15,6 @@ path = "src/lib.rs"
 [dependencies]
 ahash = { workspace = true }
 http = { workspace = true }
-once_cell = { workspace = true }
 pingap-config = { version = "0.12.0", path = "../pingap-config" }
 pingap-core = { version = "0.12.0", path = "../pingap-core" }
 pingora = { workspace = true }
@@ -33,3 +32,7 @@ criterion = { version = "0.7.0", features = ["html_reports"] }
 [[bench]]
 name = "bench"
 harness = false
+
+[lints.clippy]
+# Set the unwrap_used lint level to deny
+unwrap_used = "deny"

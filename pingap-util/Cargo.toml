@@ -21,7 +21,6 @@ ahash = { workspace = true }
 base64 = { workspace = true }
 dirs = { workspace = true }
 ipnet = { workspace = true }
-once_cell = { workspace = true }
 path-absolutize = { workspace = true }
 pem = { workspace = true }
 rustc_version_runtime = { workspace = true }
@@ -38,3 +37,7 @@ criterion = { version = "0.7.0", features = ["html_reports"] }
 [[bench]]
 name = "bench"
 harness = false
+
+[lints.clippy]
+# Set the unwrap_used lint level to deny
+unwrap_used = "deny"
